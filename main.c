@@ -26,7 +26,9 @@ int main() {
     if (error != paNoError) end(error);
    
     PaStream* stream = NULL;
-    Waveform waveform = {0, 0};
+    unsigned long duration = (unsigned long)(0.5 * SAMPLE_RATE); 
+    printf("%f", (float)1025 /(float)duration);
+    Waveform waveform = {0, 0, 0, duration};
     error = Pa_OpenDefaultStream(&stream, 0, 2, paFloat32, SAMPLE_RATE, 1024, audio, &waveform);
 
     if (error != paNoError) end(error); 
