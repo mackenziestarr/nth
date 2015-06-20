@@ -1,6 +1,13 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
 #include <portaudio.h>
 #include "waveform.h"
+
+static int run = 1;
+void handle(int noop) {
+    run = 0;
+}
 
 void end(PaError error) {
     Pa_Terminate();
@@ -21,25 +28,28 @@ int audio(const void *input, void *output, unsigned long frames,
 }
 
 int main() {
+    signal(SIGINT, handle);
+
     PaError error = paNoError;
     error = Pa_Initialize();
     if (error != paNoError) end(error);
    
     PaStream* stream = NULL;
+    
     unsigned long duration = (unsigned long)(0.5 * SAMPLE_RATE); 
-    printf("%f", (float)1025 /(float)duration);
     Waveform waveform = {0, 0, 0, duration};
+    
     error = Pa_OpenDefaultStream(&stream, 0, 2, paFloat32, SAMPLE_RATE, 1024, audio, &waveform);
 
     if (error != paNoError) end(error); 
     
     Pa_StartStream(stream);
 
-    Pa_Sleep(5 * 1000);
+    while(run);
     
     Pa_StopStream(stream);
     Pa_CloseStream(stream);
-
     end(error);
+    
     return 0;
 }
