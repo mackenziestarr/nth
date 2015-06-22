@@ -1,6 +1,7 @@
 CC = gcc
 LDFLAGS = -lportaudio
-main: main.c waveform.c
+LIB = $(wildcard lib/*.c)
+main: main.c $(LIB)
 	$(CC) -Wall -o $@ $^ $(LDFLAGS)
-debug: waveform.c main.c
+debug: main.c $(LIB)
 	$(CC) -Wall -g $^ $(LDFLAGS) && gdb ./a.out

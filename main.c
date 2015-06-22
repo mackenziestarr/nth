@@ -1,46 +1,13 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <sys/signal.h>
-#include <sys/select.h>
+#include <signal.h>
 #include <portaudio.h>
-#include <termios.h>
-#include <unistd.h>
-#include "waveform.h"
+#include "lib/cli.h"
+#include "lib/waveform.h"
 
-#define NB_ENABLE (0)
-#define NB_DISABLE (1)
 
 static int run = 1;
 void handle(int noop) {
     run = 0;
-}
-
-int keypress () {
-    fd_set buffer;
-    struct timeval time;
-    // poll
-    time.tv_sec = 0;
-    time.tv_usec = 0;
-    FD_ZERO(&buffer);
-    FD_SET(0, &buffer);
-    select(1, &buffer, NULL, NULL, &time);
-    return FD_ISSET(0, &buffer);
-}
-
-void raw_tty(int state) {
-    struct termios ttystate;
-    // get state
-    tcgetattr(0, &ttystate);
-    if (state == NB_ENABLE) {
-        ttystate.c_lflag &= ~ICANON;
-        ttystate.c_lflag &= ~ECHO;
-        ttystate.c_cc[VMIN] = 1;
-    } 
-    else if (state == NB_DISABLE) {
-        ttystate.c_lflag |= ICANON;
-        ttystate.c_lflag |= ECHO;
-    }
-    tcsetattr(0, TCSANOW, &ttystate);
 }
 
 void end(PaError error) {
@@ -56,7 +23,7 @@ int audio(const void *input, void *output, unsigned long frames,
     Waveform *wave = (Waveform*)waveform;    
     float *out = (float*)output;
     for (int i=0; i<frames; i++) {
-        generate_sine(&wave, 1000, &out);   
+        generate_sine(&wave, &out);   
     } 
     return paContinue;
 }
@@ -71,7 +38,7 @@ int main() {
     PaStream* stream = NULL;
     
     unsigned long duration = (unsigned long)(0.5 * SAMPLE_RATE); 
-    Waveform waveform = {0, 0, 0, duration};
+    Waveform waveform = {1000.0, 0, 0, 0, duration};
     
     error = Pa_OpenDefaultStream(&stream, 0, 2, paFloat32, SAMPLE_RATE, 1024, audio, &waveform);
 
@@ -87,6 +54,7 @@ int main() {
         keycode = keypress();
         if (keycode != 0) {
             key = fgetc(stdin);
+            waveform.frequency = (float) key * 20;
             fprintf(stderr, "you pressed %c\n", key);
         }
     };

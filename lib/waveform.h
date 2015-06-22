@@ -3,10 +3,11 @@
 #define WAVE_CYCLE (M_PI * 2)
 
 typedef struct Waveform {
+    float frequency;
     double left_phase;
     double right_phase;
     unsigned long frames;
     unsigned long duration;
 } Waveform;
 
-void generate_sine(Waveform** wave, float frequency, float** out);
+void generate_sine(Waveform** wave, float** out);
