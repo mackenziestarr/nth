@@ -3,6 +3,7 @@
 #define WAVE_CYCLE (M_PI * 2)
 
 typedef struct Waveform {
+    int play;
     float frequency;
     double left_phase;
     double right_phase;
