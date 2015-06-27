@@ -1,27 +1,45 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <signal.h>
 #include <math.h>
 #include <portaudio.h>
 #include "lib/cli.h"
 #include "lib/waveform.h"
 
+#define SAMPLE_RATE (44100)
+#define WAVE_CYCLE (M_PI * 2)
 
-static int run = 1;
+typedef struct ADSR {
+    bool trigger;
+    bool retrigger;
+    unsigned long duration;
+    unsigned long progress;
+    float amplitude;
+} ADSR;
+
+typedef struct Wave {
+    float frequency;
+    double phase;
+} Wave;
+
+typedef struct paData {
+    ADSR adsr;
+    Wave wave;
+} paData;
+
+static int poll = 1;
 void handle(int noop) {
-    run = 0;
+    poll = 0;
 }
 
-     
 float* buildScale(int notes, int range) {
     float* frequencies = malloc(range * sizeof(float));
     double ratio = pow(2.0, 1.0 / notes);
     double base = 330.0;
     for (int i=0; i < range; i++) {  
-        fprintf(stderr, "%f\n", base);
         frequencies[i] = base;
         base *= ratio;
-
     }
     return (float*) frequencies;  
 }
@@ -35,28 +53,49 @@ float getFrequency(char key, float* scale) {
     return *scale;
 }
     
-            
-
-
-
-
 void end(PaError error) {
     Pa_Terminate();
     if (error < 0) fprintf(stderr, "portaudio error: %s", Pa_GetErrorText(error));
 }
 
+float linearEase(ADSR* adsr, float ms) {
+    int edge = ms * SAMPLE_RATE;   
+    float peak = 0.2;
+    if (adsr->progress < edge) {
+        return peak * (adsr->progress / (float)edge);
+    }
+    else if ((adsr->duration - adsr->progress) < edge) {
+        return peak * ((adsr->duration - adsr->progress)/(float)edge);            
+    }
+    else return peak;
+}
+
 int audio(const void *input, void *output, unsigned long frames,
           const PaStreamCallbackTimeInfo* time,
           PaStreamCallbackFlags status,
-          void *waveform) 
+          void *_data) 
 {
-    Waveform *wave = (Waveform*)waveform;    
+    paData *data = (paData*) _data;    
     float *out = (float*)output;
     for (int i=0; i<frames; i++) {
-        generate_sine(&wave, &out);   
-    } 
+        if (data->adsr.trigger) {
+            *(out)++ = data->adsr.amplitude * sin(data->wave.phase);
+            data->wave.phase += (WAVE_CYCLE * data->wave.frequency) / SAMPLE_RATE;
+            if (data->wave.phase > WAVE_CYCLE) data->wave.phase -= WAVE_CYCLE;
+            data->adsr.progress++;
+            if (data->adsr.progress == data->adsr.duration) {
+                data->adsr.progress = 0;
+                data->adsr.trigger = false;
+            }        
+            data->adsr.amplitude = linearEase(&data->adsr, 0.1);
+        } else {
+            *(out)++ = 0;
+        }
+    }
+  
     return paContinue;
 }
+
 
 int main() {
     signal(SIGINT, handle);
@@ -67,10 +106,17 @@ int main() {
    
     PaStream* stream = NULL;
     
-    unsigned long duration = (unsigned long)(0.5 * SAMPLE_RATE); 
-    Waveform waveform = {0, 1000.0, 0, 0, 0, duration};
-    
-    error = Pa_OpenDefaultStream(&stream, 0, 2, paFloat32, SAMPLE_RATE, 1024, audio, &waveform);
+    paData data = {
+        .adsr.trigger = false,
+        .adsr.retrigger = false,
+        .adsr.progress = 0,
+        .adsr.duration = (unsigned long) (0.3 * SAMPLE_RATE),
+        .adsr.amplitude = 0.0,
+        .wave.phase = 0,
+        .wave.frequency = 1000.0
+    };
+            
+    error = Pa_OpenDefaultStream(&stream, 0, 1, paFloat32, SAMPLE_RATE, 1024, audio, &data);
 
     if (error != paNoError) end(error); 
     
@@ -81,13 +127,14 @@ int main() {
     int keycode = 0;
     char key;
     float* scale = buildScale(12, 12);
-    while(run) {
+    while(poll) {
         keycode = keypress();
         if (keycode != 0) {
             key = fgetc(stdin);
-            waveform.frequency = getFrequency(key, scale);
-            waveform.play = 1;
-            fprintf(stderr, "you pressed %c\n", key);
+            data.wave.frequency = getFrequency(key, scale);
+            if (data.adsr.trigger) data.adsr.retrigger = true;
+            data.adsr.trigger = true;
+            fprintf(stderr, "key: %c\r", key);
         }
     };
     free(scale);
